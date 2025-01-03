@@ -1,0 +1,204 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{float}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\usepackage{titlesec}
+\renewcommand{\thesubsubsection}{\alph{subsubsection}.}
+\titleformat{\subsubsection}[runin]
+  {\normalfont\normalsize\bfseries}
+  {\thesubsubsection}
+  {1em}
+  {}
+  [\newline]
+\setcounter{secnumdepth}{3}
+\usepackage{enumitem}
+\usepackage{stfloats}
+    
+\begin{document}
+
+\title{
+  Localization using poles \& signs detected by a lidar 
+  \\
+  \large UTC - ARS4 - Estimation for robotic navigation
+}
+
+\author{Victor Demessance, }
+
+\maketitle
+
+\section{System modeling}
+
+\vspace{2mm}
+
+\subsection{State vector}
+
+\noindent In order to represent the pose of the vehicule in the 2D space, we can use the following state vector \( \mathbf{x}_t \) :
+\[
+\mathbf{x}_t = 
+\begin{bmatrix}
+x \\ 
+y \\ 
+\theta \\ 
+v \\ 
+\omega
+\end{bmatrix}
+\]
+with :
+\begin{itemize}
+    \item \( x, y \) : Coordinates of the vehicule (ENU working frame).
+    \item \( \theta \) : Heading of the vehicule (ENU working frame).
+    \item \( v \) : Longitudinal speed.
+    \item \( \omega \) : Angular speed.
+\end{itemize}
+
+\subsection{Dynamic space state model}
+
+\noindent The evolution of the system can be define as follows :
+\[
+x_{t+1} = f(x_t, u_t) + q_t
+\]
+with :
+\begin{itemize}
+    \item $\mathbf{u}_t = [v_t, \omega_t]^T$ : speed inputs.
+    \item $\mathbf{q}_t \sim \mathcal{N}(0, Q)$ : model noise.
+\end{itemize}
+
+\vspace{2mm}
+
+\noindent Thanks to the Euler method, that uses the derivatives definition to define the value of the next iteration of the discrete space state, we have : 
+\[
+x_{k+1} = x(t) + \Delta.\dot{x}(t),
+\]
+\noindent Using basic definitions of geometry and automatic control, we can define the nonlinear function f such that (assuming constant speeds between 2 samples) : 
+\[
+\begin{aligned}
+x_{t+1} &= x_t + v_t \Delta t \cos(\theta_t), \\
+y_{t+1} &= y_t + v_t \Delta t \sin(\theta_t), \\
+\theta_{t+1} &= \theta_t + \omega_t \Delta t, \\
+v_{t+1} &= v_t, \\
+\omega_{t+1} &= \omega_t.
+\end{aligned}
+\]
+
+\newpage
+
+\section{Observation Model}
+
+\noindent We can define observation as the reception of GNSS and Lidar information. In the model, we describe it as :
+
+\vspace{2mm}
+\begin{itemize}
+    \item GNSS ($x$, $y$, $\theta$)
+    \begin{align*}
+        x_\text{GNSS} &= x \\
+        y_\text{GNSS} &= y \\
+        \theta_\text{GNSS} &= \theta
+    \end{align*}
+    with $\sigma_{x}^{2} = \sigma_{y}^{2} = 0.2$ and $\sigma_{\theta}^{2} = 0.01$ 
+    
+    \vspace{4mm}
+
+    \item Lidar ($x$, $y$, $x_{map}$, $y_{map}$)
+    \[
+        \begin{bmatrix}
+        x_\text{map} \\
+        y_\text{map}
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        x_\text{lidar} \\
+        y_\text{lidar}
+        \end{bmatrix}
+        + R(\theta)
+        \begin{bmatrix}
+        x \\
+        y
+        \end{bmatrix}.
+    \]
+    with $R(\theta)$ the rotation matrix from the vehicule frame to the ENU working frame, so we have : 
+    \[
+        \begin{bmatrix}
+        x_\text{lidar} \\
+        y_\text{lidar}
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        x_\text{map} \\
+        y_\text{map}
+        \end{bmatrix}
+        - R(\theta)
+        \begin{bmatrix}
+        x \\
+        y
+        \end{bmatrix}.
+    \]
+    that can be reformulated as :
+   \[
+        x_\text{lidar} = x_\text{map} - x \cos(\theta) + y \sin(\theta),
+        \]
+        \[
+        y_\text{lidar} = y_\text{map} - x \sin(\theta) - y \cos(\theta).
+    \]
+    with $\sigma_{x}^{2} = \sigma_y^2 = 0.1$
+\end{itemize}
+
+\vspace{4mm}
+
+\noindent The global observation model equation can be finally written as follows:
+
+\[
+\mathbf{z}_t = C x_t + r_t,
+\]
+
+with
+\[
+\mathbf{z}_t =
+\begin{bmatrix}
+x_\text{GNSS} \\
+y_\text{GNSS} \\
+\theta_\text{GNSS} \\
+x_\text{lidar} \\
+y_\text{lidar}
+\end{bmatrix}, \quad
+C =
+\begin{bmatrix}
+1 & 0 & 0 & 0 & 0 \\
+0 & 1 & 0 & 0 & 0 \\
+0 & 0 & 1 & 0 & 0 \\
+1 & 0 & 0 & 0 & 0 \\
+0 & 1 & 0 & 0 & 0
+\end{bmatrix}.
+\]
+
+\noindent with \( r_t \sim \mathcal{N}(0, R) \), and \( R \) is the combined covariance matrix of the GNSS and lidar noise.
+
+\vspace{3mm}
+
+\noindent As Lidar obervations are received at a higher frequency than GNSS observations (10Hz vs. 1Hz), they will enable us to update our state estimation more frequently. However, GNSS estimates (when available) will take precedence and enable us to recalibrate our position accurately.
+
+\section{Simulation Implementation}
+
+\subsection{Extended Kalman Filter}
+
+\subsection{Unscented Kalman Filter}
+
+\section{Real Implementation}
+
+\subsection{Multi sensor data fusion}
+
+\subsection{Extended Kalman Filter}
+
+\subsection{Unscented Kalman Filter}
+
+\section{Conclusion}
+
+\end{document}
