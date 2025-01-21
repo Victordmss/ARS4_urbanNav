@@ -33,12 +33,12 @@ end
 
 % 1 - Initialization
 x = [ref(1).x; ref(1).y; ref(1).heading; v(1); omega(1)];      % Initial state
-P = diag([0.01, 0.01, 0.1, 0.1, 0.1]);                            % Initial covariance
+P = diag([0.01, 0.01, 0.01, 0.1, 0.1]);                            % Initial covariance
 n = 5;         % State dimension
 N = 2*n+1;     % 2n+1 sampling
 
 % Noise matrices
-Q = diag([1, 1, 0.1, 0.1, 0.1]);       % Process noise
+Q = diag([0.001, 0.001, 0.01, 0.1, 0.1]);       % Process noise
 R = diag([0.2, 0.2, 0.01, 0.1, 0.1]);        % Observation noise
 
 % Time step
@@ -147,10 +147,10 @@ for k = 2:length(t)
     end
 
     x = xPts * wPts';
-    P = Q;
-    for i = 1:nPts
-        P = P + wPts(i) * (xPts(:,i) - x) * (xPts(:,i) - x)';
-    end
+    P = P + Q;
+    %for i = 1:nPts
+    %    P = P + wPts(i) * (xPts(:,i) - x) * (xPts(:,i) - x)';
+    %end
 end
 
 
