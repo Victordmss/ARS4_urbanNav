@@ -4,6 +4,9 @@ close all;
 % Load data
 load("data.mat");
 
+% PUT DISPLAY = FALSE TO DELETE THE DATA ASSOCIATION PROCESS DISPLAY
+display = true;
+
 % Initialize EKF variables
 % Initial state: x, y, theta, v, omega
 x = [gnss(1).x; gnss(1).y; gnss(1).heading; v(1); omega(1)];
@@ -53,16 +56,60 @@ for k = 2:length(t)
         P = (eye(size(P)) - K_gnss * C_gnss) * P; % Covariance update for GNSS
     end
 
+    % NN data fusion algo
+    n_landmarks = length(poles_obs(k).x);
+    x_map = [];
+    y_map = [];
+    x_lidar_map = [];
+    y_lidar_map = [];
+
+    for i = 1:n_landmarks
+        % Calculer la position des pôles dans le cadre véhicule (par rapport à la position du robot)
+        x_lidar_map(i) = x(1) + cos(x(3)) * poles_obs(k).x(i) - sin(x(3)) * poles_obs(k).y(i);
+        y_lidar_map(i) = x(2) + sin(x(3)) * poles_obs(k).x(i) + cos(x(3)) * poles_obs(k).y(i);
+    end
+
+    % Pour chaque point LiDAR, calculer la distance par rapport aux points de la carte
+    for i = 1:n_landmarks
+        % Calculer la distance entre le point LiDAR et tous les points de la carte
+        distances = sqrt((map(:, 1) - x_lidar_map(i)).^2 + (map(:, 2) - y_lidar_map(i)).^2);
+
+        % Trouver l'indice du pôle de la carte le plus proche
+        [~, idx] = min(distances);
+
+        % Sauvegarder l'association
+        x_map(i) = map(idx, 1);  % coordonnées X de la carte associée
+        y_map(i) = map(idx, 2);  % coordonnées Y de la carte associée
+    end
+
+    % Display
+    if display && ~isempty(x_map)
+        clf;
+        hold on;
+
+        plot(x_lidar_map, y_lidar_map, 'ro', 'DisplayName', 'LiDAR Detections');
+        plot(x(1), x(2), 'bo', 'DisplayName', 'Robot Position');
+        plot(x_map, y_map, 'go', 'DisplayName', 'Map Pole Position Selected');
+        plot([ref.x], [ref.y], 'v-', 'DisplayName', 'Reference');
+
+        legend;
+        title('Association LiDAR Detections with Map Points');
+        xlabel('East (m)');
+        ylabel('North (m)');
+        grid on;
+        pause(0.1);
+    end
+
+
     % Correction Step with Lidar
-    if ~isempty(obs(k).x_map)
-        n_landmarks = length(obs(k).x_map);
+    if ~isempty(x_map)
         z_lidar = [];
         z_pred_lidar = [];
         C_lidar = zeros(2 * n_landmarks, 5);
 
         for i = 1:n_landmarks
-            delta_x = obs(k).x_map(i) - x(1);
-            delta_y = obs(k).y_map(i) - x(2);
+            delta_x = x_map(i) - x(1);
+            delta_y = y_map(i) - x(2);
             r = sqrt(delta_x^2 + delta_y^2);
             bearing = atan2(delta_y, delta_x) - x(3);
 
