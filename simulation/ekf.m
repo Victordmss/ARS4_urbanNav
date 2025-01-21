@@ -4,161 +4,109 @@ close all;
 % Load data
 load("data.mat");
 
-function F = compute_F_jacobian(x_t, dt)
-    % Inputs:
-    % x_t: Current state vector [x_t, y_t, theta_t, v_t, omega_t]
-    % dt: Time step (delta t)
-
-    % Extract state variables
-    theta = x_t(3);
-    v = x_t(4);
-
-    % Initialize the Jacobian matrix F
-    F = eye(5); % Identity matrix of size 5x5
-
-    % Fill in the non-zero derivatives
-    F(1, 3) = -v * dt * sin(theta); % d(x_next)/d(theta)
-    F(1, 4) = dt * cos(theta);      % d(x_next)/d(v)
-
-    F(2, 3) = v * dt * cos(theta);  % d(y_next)/d(theta)
-    F(2, 4) = dt * sin(theta);      % d(y_next)/d(v)
-
-    F(3, 5) = dt;                   % d(theta_next)/d(omega)
-end
-
-
-
-
-% 1 - Initialization
-x = [ref(1).x; ref(1).y; ref(1).heading; v(1); omega(1)];       % Initial state
-P = diag([0.5, 0.5, 0.1, 0.1, 0.1]);                            % Initial covariance
-n = 5;                                                          % State dimension
+% Initialize EKF variables
+% Initial state: x, y, theta, v, omega
+x = [gnss(1).x; gnss(1).y; gnss(1).heading; v(1); omega(1)];
+P = diag([0.5, 0.5, 0.1, 0.1, 0.1]); % Initial covariance
 
 % Noise matrices
-Q = diag([0.2, 0.2, 0.01, 0.01, 0.01]);                         % Process noise
-n_landmarks_0 = length(obs(1).x_map);
-R = blkdiag(diag([0.2, 0.2, 0.01]), kron(eye(n_landmarks_0), diag([0.1, 0.1])));
-
-
-% Initialize Jacobian matrix
-m = 3 + 2 * n_landmarks_0; % Observation dimension
-C = zeros(m, 5);
-
-% GNSS measurements (first 3 rows correspond to x, y, theta)
-C(1:3, 1:3) = eye(3);
-
-% LiDAR measurements (one row per landmark, starting from the 4th row)
-for i = 1:n_landmarks_0
-    % Compute delta values for the current landmark
-    delta_x = obs(1).x_map(i) - x(1);
-    delta_y = obs(1).y_map(i) - x(2);
-
-    % Fill jacobian values
-    row_idx = 3 + (i - 1) * 2;
-    C(row_idx, 1) = -cos(x(3));
-    C(row_idx, 2) = -sin(x(3));
-    C(row_idx, 3) = -sin(x(3)) * delta_x + cos(x(3)) * delta_y;
-
-    C(row_idx + 1, 1) = sin(x(3));
-    C(row_idx + 1, 2) = -cos(x(3));
-    C(row_idx + 1, 3) = -cos(x(3)) * delta_x - sin(x(3)) * delta_y;
-end
-
-
-K = P * C' / (C * P * C' + R); % Initial kalman gain
+Q = diag([0.01, 0.01, 0.001, 0.01, 0.001]); % Process noise
+R_gnss = diag([0.2, 0.2, 0.01]); % GNSS observation noise
+R_lidar = diag([0.1, 0.1]); % Lidar observation noise
 
 % Time step
 dt = mean(diff(t));
 
 % Storage for EKF estimates
-ekf_estimates = zeros(length(t), 3);         % Only store x, y, theta for visualization
-ekf_estimates(1, :) = x(1:3)';
-lidar_observations = [];                     % Store lidar observations for plotting
+ekf_estimates = zeros(length(t), 5); % Storing all state variables
+ekf_estimates(1, :) = x';
+lidar_observations = [];
 
-% 2 - Loop over time steps
+% EKF loop
 for k = 2:length(t)
+    % Prediction Step
+    % State prediction
+    x = [x(1) + x(4) * dt * cos(x(3));
+         x(2) + x(4) * dt * sin(x(3));
+         x(3) + x(5) * dt;
+         v(k);
+         omega(k);]
 
-    % 2.1 - Get measures
-    % Get measurements (LiDAR)
-    z_lidar = [];
-    y_pred_lidar = [];
-    if ~isempty(obs(k))
-        fprintf("LiDAR measure \n");
-        for idx = 1:length(obs(k).x)  % Parse all LiDAR observations
-            z_lidar = [z_lidar; obs(k).x(idx); obs(k).y(idx)];
-            x_lidar = cos(x(3))*(obs(k).x_map(idx) - x(1)) + sin(x(3)) * (obs(k).y_map(idx) - x(2));
-            y_lidar = -sin(x(3))*(obs(k).x_map(idx) - x(1)) + cos(x(3)) * (obs(k).y_map(idx) - x(2));
-            y_pred_lidar = [y_pred_lidar; obs(k).x(idx); obs(k).y(idx)];
+    % Jacobian of the state transition function
+    F = [1, 0, -x(4) * dt * sin(x(3)), dt * cos(x(3)), 0;
+         0, 1, x(4) * dt * cos(x(3)), dt * sin(x(3)), 0;
+         0, 0, 1, 0, dt;
+         0, 0, 0, 1, 0;
+         0, 0, 0, 0, 1];
+
+    % Covariance prediction
+    P = F * P * F' + Q;
+
+    % Correction Step with GNSS
+    if ~isnan(gnss(k).x)
+        z_gnss = [gnss(k).x; gnss(k).y; gnss(k).heading];
+        C_gnss = zeros(3, 5);
+        C_gnss(1:3, 1:3) = eye(3); % Observation Jacobian matrix for GNSS
+        z_pred_gnss = C_gnss * x; % Predicted GNSS measurement
+        K_gnss = P * C_gnss' / (C_gnss * P * C_gnss' + R_gnss); % Kalman gain for GNSS
+        x = x + K_gnss * (z_gnss - z_pred_gnss); % State update with GNSS
+        P = (eye(size(P)) - K_gnss * C_gnss) * P; % Covariance update for GNSS
+    end
+
+    % Correction Step with Lidar
+    if ~isempty(obs(k).x_map)
+        n_landmarks = length(obs(k).x_map);
+        z_lidar = [];
+        z_pred_lidar = [];
+        C_lidar = zeros(2 * n_landmarks, 5);
+
+        for i = 1:n_landmarks
+            delta_x = obs(k).x_map(i) - x(1);
+            delta_y = obs(k).y_map(i) - x(2);
+            r = sqrt(delta_x^2 + delta_y^2);
+            bearing = atan2(delta_y, delta_x) - x(3);
+
+            % Lidar measurements in polar coordinates
+            z_lidar = [z_lidar; r; bearing];
+
+            % Predicted Lidar measurement
+            r_pred = sqrt(delta_x^2 + delta_y^2);
+            bearing_pred = atan2(delta_y, delta_x) - x(3);
+            z_pred_lidar = [z_pred_lidar; r_pred; bearing_pred];
+
+            % Jacobian matrix for Lidar
+            row_idx = 2 * (i - 1) + 1;
+            C_lidar(row_idx, 1) = -(delta_x / r);
+            C_lidar(row_idx, 2) = -(delta_y / r);
+            C_lidar(row_idx, 3) = 0;
+
+            C_lidar(row_idx + 1, 1) = delta_y / (r^2);
+            C_lidar(row_idx + 1, 2) = -delta_x / (r^2);
+            C_lidar(row_idx + 1, 3) = -1;
+        end
+
+        % Kalman gain for Lidar
+        R_lidar_full = kron(eye(n_landmarks), R_lidar);
+        K_lidar = P * C_lidar' / (C_lidar * P * C_lidar' + R_lidar_full);
+
+        % State update with Lidar
+        x = x + K_lidar * (z_lidar - z_pred_lidar);
+
+        % Covariance update for Lidar
+        P = (eye(size(P)) - K_lidar * C_lidar) * P;
+
+        % Convert range and bearing to Cartesian for visualization
+        for i = 1:n_landmarks
+            range = z_lidar(2 * (i - 1) + 1);
+            bearing = z_lidar(2 * (i - 1) + 2);
+            obs_x = x(1) + range * cos(bearing + x(3));
+            obs_y = x(2) + range * sin(bearing + x(3));
+            lidar_observations = [lidar_observations; [obs_x, obs_y]];
         end
     end
 
-    % Get measurements (GNSS)
-
-    z_gnss = [x(1); x(2); x(3)];
-    y_pred_GNSS = [x(1); x(2); x(3)];
-    if ~isnan(gnss(k).x)
-        fprintf("GNSS measure\n");
-        z_gnss = [gnss(k).x; gnss(k).y; gnss(k).heading;];
-    end
-
-    % Create the observation vector
-    z = [z_gnss; z_lidar];
-
-    % 2.2 Estimation step
-
-    y_pred = [y_pred_GNSS ; y_pred_lidar];
-
-    % Observation jacobian computation
-    m = length(z); % Observation dimension
-    C = zeros(m, 5);
-
-    % GNSS measurements (first 3 rows correspond to x, y, theta)
-    C(1:3, 1:3) = eye(3);
-
-    % LiDAR measurements (one row per landmark, starting from the 4th row)
-    n_landmarks = length(obs(k).x_map);
-    for i = 1:n_landmarks
-        % Compute delta values for the current landmark
-        delta_x = obs(k).x_map(i) - x(1);
-        delta_y = obs(k).y_map(i) - x(2);
-
-        % Fill jacobian values
-        row_idx = 3 + (i - 1) * 2;
-        C(row_idx, 1) = -cos(x(3));
-        C(row_idx, 2) = -sin(x(3));
-        C(row_idx, 3) = -sin(x(3)) * delta_x + cos(x(3)) * delta_y;
-
-        C(row_idx + 1, 1) = sin(x(3));
-        C(row_idx + 1, 2) = -cos(x(3));
-        C(row_idx + 1, 3) = -cos(x(3)) * delta_x - sin(x(3)) * delta_y;
-    end
-
-    R = blkdiag(diag([0.2, 0.2, 0.01]), kron(eye(n_landmarks), diag([0.1, 0.1])));
-
-    % Predict K
-    K = P * C' * pinv(C * P * C' + R);
-    innovation = z - y_pred;
-    x = x + K * innovation;
-
-    P = (eye(n) - K*C) * P * (eye(n) - K*C)' + K * R * K';
-    % 2.3 Save EKF estimate for visualization
-    ekf_estimates(k, :) = x(1:3)';
-
-    % 2.4 Prediction step
-    A = compute_F_jacobian(x, dt);
-
-    % Predict state
-    x = [
-        x(1) + x(4) * dt * cos(x(3));
-        x(2) + x(4) * dt * sin(x(3));
-        x(3) + x(5) * dt;
-        v(k);
-        omega(k);
-    ];
-
-    % Predict covariance
-    P = A * P * A' + Q;
-
+    % Save EKF estimate for visualization
+    ekf_estimates(k, :) = x';
 end
 
 % Plot results
@@ -167,9 +115,9 @@ plot([ref.x], [ref.y], 'g-', 'DisplayName', 'Reference');
 hold on;
 plot(ekf_estimates(:, 1), ekf_estimates(:, 2), 'b-', 'DisplayName', 'EKF Estimate');
 plot([gnss.x], [gnss.y], 'ro', 'DisplayName', 'GNSS Observations');
+plot(lidar_observations(:, 1), lidar_observations(:, 2), 'kx', 'DisplayName', 'Lidar Observations');
 legend;
 title('EKF Localization with GNSS and Lidar Observations');
 xlabel('East (m)');
 ylabel('North (m)');
 grid on;
-
