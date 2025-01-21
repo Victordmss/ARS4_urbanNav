@@ -38,7 +38,7 @@ n = 5;         % State dimension
 N = 2*n+1;     % 2n+1 sampling
 
 % Noise matrices
-Q = diag([0.1, 0.1, 0.1, 0.1, 0.1]);       % Process noise
+Q = diag([1, 1, 0.1, 0.1, 0.1]);       % Process noise
 R = diag([0.2, 0.2, 0.01, 0.1, 0.1]);        % Observation noise
 
 % Time step
@@ -71,7 +71,7 @@ for k = 2:length(t)
                     + cos(xPts(3, i)) * (obs(k).y_map(j) - xPts(2, i));
 
           % Add the value to the observation
-          yPts_temp = [yPts_temp; x_lidar; y_lidar];
+          yPts_temp = [yPts_temp; obs(k).x(j); obs(k).y(j)];
       end
 
       % Construction de yPts pour ce point sigma (GNSS + Lidar)
