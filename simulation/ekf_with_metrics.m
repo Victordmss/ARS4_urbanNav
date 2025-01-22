@@ -177,4 +177,3 @@ disp(['Max Error in h= ', num2str(ex_abs_max)]);
 disp(['Mean Square Error in h= ', num2str(mean(ex_MSE))]);
 disp(['Consistency in h= ', num2str(Consistency_h)]);
 disp('');
-

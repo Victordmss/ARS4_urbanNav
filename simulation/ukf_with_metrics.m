@@ -29,7 +29,7 @@ function ukf3()
     % Noise
     Q       = diag([0.01, 0.01, 0.001, 0.01, 0.001]);  % Process noise
     R_gnss  = diag([0.2, 0.2, 0.01]);                 % GNSS [x, y, heading]
-    R_lidar = diag([0.2, 0.2]);                       % Lidar [range, bearing]
+    R_lidar = diag([0.3, 0.3]);                       % Lidar [range, bearing]
  
     dt = mean(diff(t)); % time step
  
