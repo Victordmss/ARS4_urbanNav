@@ -31,7 +31,7 @@
   \large UTC - ARS4 - Estimation for robotic navigation
 }
 
-\author{Victor Demessance, }
+\author{Victor Demessance, Galia Fabiola Cornejo Urquieta, Fadi Ben Ali}
 
 \maketitle
 
@@ -43,7 +43,7 @@
 
 \noindent In order to represent the pose of the vehicule in the 2D space, we can use the following state vector \( \mathbf{x}_t \) :
 \[
-\mathbf{x}_t = 
+X = 
 \begin{bmatrix}
 x \\ 
 y \\ 
@@ -64,7 +64,7 @@ with :
 
 \noindent The evolution of the system can be define as follows :
 \[
-x_{t+1} = f(x_t, u_t) + q_t
+X_{t+1} = f(X_t, u_t) + q_t
 \]
 with :
 \begin{itemize}
@@ -76,7 +76,7 @@ with :
 
 \noindent Thanks to the Euler method, that uses the derivatives definition to define the value of the next iteration of the discrete space state, we have : 
 \[
-x_{k+1} = x(t) + \Delta.\dot{x}(t),
+X_{k+1} = X(t) + \Delta.\dot{X}(t),
 \]
 \noindent Using basic definitions of geometry and automatic control, we can define the nonlinear function f such that (assuming constant speeds between 2 samples) : 
 \[
@@ -89,6 +89,20 @@ v_{t+1} &= v_t, \\
 \end{aligned}
 \]
 
+\noindent Consequently, we have 
+
+\begin{align*}
+    f(X_t, u_t) =
+    \begin{bmatrix}
+    x_t + v_t \Delta t \cos(\theta_t), \\
+    y_t + v_t \Delta t \sin(\theta_t), \\
+    \theta_t + \omega_t \Delta t, \\
+    v_t, \\
+    \omega_t.
+    \end{bmatrix}.
+\end{align*}
+
+
 \newpage
 
 \section{Observation Model}
@@ -97,7 +111,7 @@ v_{t+1} &= v_t, \\
 
 \vspace{2mm}
 \begin{itemize}
-    \item GNSS ($x$, $y$, $\theta$)
+    \item GNSS ($x_{GNSS}$, $y_{GNSS}$, $\theta_{GNSS}$)
     \begin{align*}
         x_\text{GNSS} &= x \\
         y_\text{GNSS} &= y \\
@@ -107,56 +121,34 @@ v_{t+1} &= v_t, \\
     
     \vspace{4mm}
 
-    \item Lidar ($x$, $y$, $x_{map}$, $y_{map}$)
-    \[
-        \begin{bmatrix}
-        x_\text{map} \\
-        y_\text{map}
-        \end{bmatrix}
-        =
-        \begin{bmatrix}
-        x_\text{lidar} \\
-        y_\text{lidar}
-        \end{bmatrix}
-        + R(\theta)
-        \begin{bmatrix}
-        x \\
-        y
-        \end{bmatrix}.
-    \]
-    with $R(\theta)$ the rotation matrix from the vehicule frame to the ENU working frame, so we have : 
-    \[
-        \begin{bmatrix}
-        x_\text{lidar} \\
-        y_\text{lidar}
-        \end{bmatrix}
-        =
-        \begin{bmatrix}
-        x_\text{map} \\
-        y_\text{map}
-        \end{bmatrix}
-        - R(\theta)
-        \begin{bmatrix}
-        x \\
-        y
-        \end{bmatrix}.
-    \]
-    that can be reformulated as :
-   \[
-        x_\text{lidar} = x_\text{map} - x \cos(\theta) + y \sin(\theta),
-        \]
-        \[
-        y_\text{lidar} = y_\text{map} - x \sin(\theta) - y \cos(\theta).
-    \]
-    with $\sigma_{x}^{2} = \sigma_y^2 = 0.1$
+    \item Lidar ($x_{lidar}$, $y_{lidar}$, $x_{map}$, $y_{map}$)
+   
+    \vspace{2mm}
+    
+    To process LiDAR observation, we make a change of variables in polar coordinates to compute the estimated observation:
+
+    \begin{equation*}
+        \hat{\rho}^{i} = \sqrt{(x_{map}^{i} - x_t)^2 + (y_{map}^{i} - y_t)^2} 
+    \end{equation*}
+    \begin{equation*}
+        \hat{\lambda}^{i} = \arctan2(y_{map}^{i} - y_t, x_{map}^{i} - x_t) - \theta_t
+    \end{equation*}
+
+    \noindent And so we can compare it with the real observation in polar coordinates
+    \begin{equation*}
+        \rho^{i} = \sqrt{(x_{lidar})^2 + (y_{lidar})^2} 
+    \end{equation*}
+    \begin{equation*}
+        \lambda^{i} = \arctan2(y_{lidar}, x_{lidar})
+    \end{equation*}
 \end{itemize}
 
-\vspace{4mm}
+\vspace{2mm}
 
-\noindent The global observation model equation can be finally written as follows:
+\noindent The global observation model equation can be finally written as follows (defining $M$ as the map informations):
 
 \[
-\mathbf{z}_t = C x_t + r_t,
+\mathbf{z}_t = g(X_t, M),
 \]
 
 with
@@ -166,29 +158,117 @@ with
 x_\text{GNSS} \\
 y_\text{GNSS} \\
 \theta_\text{GNSS} \\
-x_\text{lidar} \\
-y_\text{lidar}
+\rho^{i} \\
+\lambda^{i}
 \end{bmatrix}, \quad
-C =
+g(X_t, M) =
 \begin{bmatrix}
-1 & 0 & 0 & 0 & 0 \\
-0 & 1 & 0 & 0 & 0 \\
-0 & 0 & 1 & 0 & 0 \\
-1 & 0 & 0 & 0 & 0 \\
-0 & 1 & 0 & 0 & 0
+g_\text{GNSS} \\
+g_\text{LiDAR}
+\end{bmatrix} = 
+\begin{bmatrix}
+x_t \\
+y_t \\
+\theta_t \\
+\hat{\rho}^{i} \\
+\hat{\lambda}^{i} \\
 \end{bmatrix}.
 \]
 
-\noindent with \( r_t \sim \mathcal{N}(0, R) \), and \( R \) is the combined covariance matrix of the GNSS and lidar noise.
-
 \vspace{3mm}
 
-\noindent As Lidar obervations are received at a higher frequency than GNSS observations (10Hz vs. 1Hz), they will enable us to update our state estimation more frequently. However, GNSS estimates (when available) will take precedence and enable us to recalibrate our position accurately.
+\noindent As Lidar obervations are received at a higher frequency than GNSS observations (10Hz vs. 1Hz), they will enable us to update our state estimation more frequently.
 
 \section{Simulation Implementation}
 
+The initial state for the simulation refered to the first position of the GNSS sensor. We have \begin{align*}
+   x_0 = \begin{bmatrix}
+    \text{gnss(1).x} \\ 
+    \text{gnss(1).y} \\
+    \text{gnss(1).heading} \\
+    \text{v(1)} \\
+    \text{omega(1)}
+    \end{bmatrix}
+\end{align*}
+
+\noindent Initial covariance matrix $P$ is set to
+\begin{align*}
+   P = \begin{bmatrix}
+    0.5 & 0 & 0 & 0 & 0 \\ 
+    0 & 0.5 & 0 & 0 & 0 \\
+    0 & 0 & 0.1 & 0 & 0 \\
+    0 & 0 & 0 & 0.1 & 0 \\
+    0 & 0 & 0 & 0 & 0.1
+    \end{bmatrix}
+\end{align*}
+
+\noindent Initial process noise matrix $Q$ is set to
+\begin{align*}
+   Q = \begin{bmatrix}
+    0.01 & 0 & 0 & 0 & 0 \\ 
+    0 & 0.01 & 0 & 0 & 0 \\
+    0 & 0 & 0.001 & 0 & 0 \\
+    0 & 0 & 0 & 0.01 & 0 \\
+    0 & 0 & 0 & 0 & 0.001
+    \end{bmatrix}
+\end{align*}
+
+\noindent For the simulation, we decided to separate the two observation models and implement 2 separate Kalman filters. In this way, we can correct the state with two types of independent observations.
+
 \subsection{Extended Kalman Filter}
 
+To apply EKF, we need to compute the jacobians of the observation and evolution models. We have :
+\begin{align*}
+    F &= \frac{\partial f}{\partial X} \\ 
+    &=
+    \begin{bmatrix}
+    1 & 0 & -v \Delta t \sin(\theta) & \Delta t \cos(\theta) & 0 \\
+    0 & 1 & v \Delta t \cos(\theta) & \Delta t \sin(\theta) & 0 \\
+    0 & 0 & 1 & 0 & \Delta t \\
+    0 & 0 & 0 & 1 & 0 \\
+    0 & 0 & 0 & 0 & 1
+    \end{bmatrix}.
+\end{align*}
+
+\begin{align*}
+    C_{\text{GNSS}} &= \frac{\partial g_\text{GNSS}}{\partial X} =
+    \begin{bmatrix}
+    1 & 0 & 0 & 0 & 0\\
+    0 & 1 & 0 & 0 & 0\\
+    0 & 0 & 1 & 0 & 0\\
+    \end{bmatrix}.
+\end{align*}
+
+\[
+C_{\text{LiDAR}} =
+\begin{bmatrix}
+-\frac{\Delta X}{r} & -\frac{\Delta Y}{r} & 0 & 0 & 0 \\
+\frac{\Delta Y}{r^2} & -\frac{\Delta X}{r^2} & -1 & 0 & 0 \\
+\end{bmatrix}
+\]
+
+With 
+\begin{align*}
+    \Delta_X &= x_{map} - x_t \\ 
+    \Delta_Y &= y_{map} - y_t \\ 
+    r &= \sqrt{\Delta_X^2 + \Delta_Y^2}
+\end{align*}
+
+The results using just GNSS data are better than with the use of LiDAR measurements (Figure n°1 \& 2)
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{simulation_GNSSLiDAR_trajectory.png}
+    \caption{EKF Localization with GNSS and Lidar Observations}
+    \label{fig:enter-label}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.97\linewidth]{simulation_GNSS_trajectory.png}
+    \caption{EKF Localization with GNSS Observations}
+    \label{fig:enter-label}
+\end{figure}
 \subsection{Unscented Kalman Filter}
 
 \section{Real Implementation}
