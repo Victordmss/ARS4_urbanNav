@@ -5,7 +5,7 @@ close all;
 load("data.mat");
 
 % PUT DISPLAY = FALSE TO DELETE THE DATA ASSOCIATION PROCESS DISPLAY
-display = false;
+display = true;
 
 % Initialize EKF variables
 % Initial state: x, y, theta, v, omega
@@ -90,7 +90,7 @@ for k = 2:length(t)
         plot(x_lidar_map, y_lidar_map, 'ro', 'DisplayName', 'LiDAR Detections');
         plot(x(1), x(2), 'bo', 'DisplayName', 'Robot Position');
         plot(x_map, y_map, 'go', 'DisplayName', 'Map Pole Position Selected');
-        plot([ref.x], [ref.y], 'v-', 'DisplayName', 'Reference');
+        plot([ref.x], [ref.y], 'DisplayName', 'Reference');
 
         legend;
         title('Association LiDAR Detections with Map Points');
@@ -114,10 +114,10 @@ for k = 2:length(t)
 
             % ------------------------------------
             % Line to delete LiDAR obs computation
-            %delta_x = x_map(i) - x(1);
-            %delta_y = y_map(i) - x(2);
-            %r = sqrt(delta_x^2 + delta_y^2);
-            %bearing = atan2(delta_y, delta_x) - x(3);
+            delta_x = x_map(i) - x(1);
+            delta_y = y_map(i) - x(2);
+            r = sqrt(delta_x^2 + delta_y^2);
+            bearing = atan2(delta_y, delta_x) - x(3);
             % ------------------------------------
 
             % Lidar measurements in polar coordinates

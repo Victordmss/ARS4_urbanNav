@@ -256,14 +256,14 @@ With
 
 The results using just GNSS data are better than with the use of LiDAR measurements (Figure n°1 \& 2)
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=1\linewidth]{simulation_GNSSLiDAR_trajectory.png}
     \caption{EKF Localization with GNSS and Lidar Observations}
     \label{fig:enter-label}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.97\linewidth]{simulation_GNSS_trajectory.png}
     \caption{EKF Localization with GNSS Observations}
@@ -271,11 +271,73 @@ The results using just GNSS data are better than with the use of LiDAR measureme
 \end{figure}
 \subsection{Unscented Kalman Filter}
 
+\newpage
+
 \section{Real Implementation}
 
 \subsection{Multi sensor data fusion}
 
+To be able to use the LiDAR observations in real time, we need to create a data association algorithm that will link the observation to the global pole position in the ENU frame. We create a NN association based on the global poles map (Figure n°3) and the observed poles converted in the ENU frame.   
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{globalMapPoles_trajectory.png}
+    \caption{Global Poles Map superposed on the Reference Trajectory (with GNSS obs)}
+    \label{fig:enter-label}
+\end{figure}
+
+For each pole detected by the LiDAR, its coordinates in the vehicle frame \((x_{\text{lidar}}, y_{\text{lidar}})\) are transformed into the global frame \((x_{\text{lidar}}^{M}, y_{\text{lidar}}^{M})\) using the current estimated robot state \((x_t, y_t, \theta_t)\). For this process, we use the \textbf{cartesian coordinates} and we compute :
+
+\[
+\begin{bmatrix}
+x_{\text{lidar}}^{M} \\
+y_{\text{lidar}}^{M}
+\end{bmatrix}
+=
+\begin{bmatrix}
+x_t \\
+y_t
+\end{bmatrix} 
++
+R(\theta_t)
+\begin{bmatrix}
+x_{\text{lidar}} \\
+y_{\text{lidar}}
+\end{bmatrix}
+\]
+\noindent That can be reformulate as :
+
+\[
+x_{\text{lidar}}^{M} = x_t + \cos(\theta_t) \cdot x_{\text{lidar}} - \sin(\theta_t) \cdot y_{\text{lidar}}
+\]
+\[
+y_{\text{lidar}}^{M} = y_t + \sin(\theta_t) \cdot x_{\text{lidar}} + \cos(\theta_t) \cdot y_{\text{lidar}}
+\]
+
+\noindent After that, we compute the Euclidean distance between its position \((x_{\text{lidar}}^{M}, y_{\text{lidar}}^{M})\) and all the poles in the map \((x_{\text{map}}, y_{\text{map}})\)
+\[
+\text{d}_{j} = \sqrt{(x_{\text{map}}^j - x_{\text{lidar}}^{M})^2 + (y_{\text{map}}^j - y_{\text{lidar}}^{M})^2}
+\]
+where \(j\) iterates over all the poles in the map.
+
+\vspace{2mm}
+
+\noindent In the case of a NN association, we basically link the map pole with the smallest distance to the detected pole as the corresponding association (Figure n°4):
+\[
+j^* = \arg\min_j \text{d}_j
+\]
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{NN_association_trajectory.png}
+    \caption{NN process on LiDAR observation with selected linked map poles}
+    \label{fig:enter-label}
+\end{figure}
+
+
 \subsection{Extended Kalman Filter}
+
+The implementation of the EKF is the same than in the simulation part, we just need to apply the NN algorithm before the process of LiDAR observation.
 
 \subsection{Unscented Kalman Filter}
 
