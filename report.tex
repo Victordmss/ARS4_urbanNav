@@ -181,6 +181,8 @@ y_t \\
 
 \section{Simulation Implementation}
 
+\subsection{Extended Kalman Filter Initialization}
+
 Filter is implemented following system and observation modelling sections. Once implemented, we seek to tune it so that it has 95\% consistency. We also have to check if the estimation error is not biased. We do consistency test using the reference values for the variables x, y and heading (h). We do the test for each of them. The results are shown in the following table:
 
 \begin{align*}
@@ -243,6 +245,71 @@ The initial state for the simulation refered to the first position of the GNSS s
 \noindent Note that we trust a lot more the GNSS measures than the lidar measures, given the fact that in real data, detection algorithms may fall to detect poles and traffic signs and may also detect some false positives, so we expect to have a really noisy data.
 
 \noindent For the simulation, we decided to separate the two observation models and implement 2 separate Kalman filters. In this way, we can correct the state with two types of independent observations.
+
+
+\subsection{Unscented Kalman Filter Initialization}
+
+Following the same protocole we have the following results for the unscented kalman filter:
+
+\begin{align*}
+\begin{tabular}{c|c|c|c|c} 
+  Variable & Mean Error & Max Error & MSE & Consistency \\ \hline 
+  x & -0.03998 & 0.51297 & 0.028646 & 1.0000 \\
+  y   & -0.16454 & 0.61987 &  0.055269 & 0.99413\\
+    h   & -0.0082228 & 0.042492 &  0.00010691 & 1.0000\\
+\end{tabular}
+\end{align*}
+
+
+The initial state for the simulation refered to the first position of the GNSS sensor. We have \begin{align*}
+   x_0 = \begin{bmatrix}
+    \text{gnss(1).x} \\ 
+    \text{gnss(1).y} \\
+    \text{gnss(1).heading} \\
+    \text{v(1)} \\
+    \text{omega(1)}
+    \end{bmatrix}
+\end{align*}
+
+\noindent Initial covariance matrix $P$ is set to
+\begin{align*}
+   P = \begin{bmatrix}
+    0.5 & 0 & 0 & 0 & 0 \\ 
+    0 & 0.5 & 0 & 0 & 0 \\
+    0 & 0 & 0.1 & 0 & 0 \\
+    0 & 0 & 0 & 0.5 & 0 \\
+    0 & 0 & 0 & 0 & 0.5
+    \end{bmatrix}
+\end{align*}
+
+\noindent Initial process noise matrix $Q$ is set to
+\begin{align*}
+   Q = \begin{bmatrix}
+    0.1 & 0 & 0 & 0 & 0 \\ 
+    0 & 0.1 & 0 & 0 & 0 \\
+    0 & 0 & 0.001 & 0 & 0 \\
+    0 & 0 & 0 & 0.1 & 0 \\
+    0 & 0 & 0 & 0 & 0.001
+    \end{bmatrix}
+\end{align*}
+
+\begin{align*}
+   R_g = \begin{bmatrix}
+    0.2 & 0 & 0 \\ 
+    0 & 0.2 & 0 \\
+    0 & 0 & 0.01  \\
+    \end{bmatrix}
+\end{align*}
+
+
+\begin{align*}
+   R_l = \begin{bmatrix}
+    0.3 & 0 \\ 
+    0 & 0.3 \\
+    \end{bmatrix}
+\end{align*}
+
+\noindent Note that we trust more the GNSS measures than the lidar measures, just as the previous case.
 
 \subsection{Extended Kalman Filter}
 
@@ -344,6 +411,62 @@ y_{\text{lidar}}
 x_{\text{lidar}}^{M} = x_t + \cos(\theta_t) \cdot x_{\text{lidar}} - \sin(\theta_t) \cdot y_{\text{lidar}}
 \]
 \[
+y_{\text{lidar}}^{M} = y_t + \sin(\theta_t) \cdot x_{\text{lidar}} + \cos(\theta_t) \cdot y_{\text{lidar}}
+\]
+
+\noindent After that, we compute the Euclidean distance between its position \((x_{\text{lidar}}^{M}, y_{\text{lidar}}^{M})\) and all the poles in the map \((x_{\text{map}}, y_{\text{map}})\)
+\[
+\text{d}_{j} = \sqrt{(x_{\text{map}}^j - x_{\text{lidar}}^{M})^2 + (y_{\text{map}}^j - y_{\text{lidar}}^{M})^2}
+\]
+where \(j\) iterates over all the poles in the map.
+
+\vspace{2mm}
+
+\noindent In the case of a NN association, we basically link the map pole with the smallest distance to the detected pole as the corresponding association (Figure n°4):
+\[
+j^* = \arg\min_j \text{d}_j
+\]
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{NN_association_trajectory.png}
+    \caption{NN process on LiDAR observation with selected linked map poles}
+    \label{fig:enter-label}
+\end{figure}
+
+
+\subsection{Extended Kalman Filter}
+
+The implementation of the EKF is the same than in the simulation part, we just need to apply the NN algorithm before the process of LiDAR observation.
+
+\subsection{Unscented Kalman Filter}
+
+\section{Filter comparison}
+
+To evaluate the two filters we use reference values and compute for variables x, y and h. 
+
+\begin{table}
+\centering
+\caption{Filter comparison}
+\begin{tabular}{c|c|c|c|c|c|c} 
+\multicolumn{7}{|c|}{\textbf{SIMULATION}}\\ \hline
+ & \multicolumn{2}{|c|}{\textbf{Mean Error}} & \multicolumn{2}{|c|}{\textbf{Max Error}} & \multicolumn{2}{|c|}{\textbf{MSE}}\\ \hline
+var & EKF & UKF & EKF & UKF & EKF & UKF \\ \hline
+  x  & 0.10644 & -0.03998 & 1.9729 & 0.51297 & 0.15641 & 0.028646\\
+  y   & -0.056811 & -0.16454 &  2.3455 & 0.61987 & 0.12408 & 0.055269 \\
+  h   & -1.2708 & -0.0082228 &  6.3689 & 0.042492 & 2.567 & 0.00010691 \\
+\end{tabular}
+
+\end{table}
+
+
+\section{Conclusions}
+
+According to the results in the previous table, we can see that the UKF filter works better than the EKF. Particularly, the estimate of the variable h made by the unscented Kalman filter is impressive compared to the estimate made by the filter. This is something we expected, since the filter propagates the sigma points through the non-linear functions and therefore does not make linear approximations.
+
+We conclude also that, in general, for the initial values, we assume that the lidar data is less reliable than the gnss and therefore it has more noise (in fact, for the real data, the lidar may miss some poles or detect some false positives).
+
+\end{document}
 y_{\text{lidar}}^{M} = y_t + \sin(\theta_t) \cdot x_{\text{lidar}} + \cos(\theta_t) \cdot y_{\text{lidar}}
 \]
 
