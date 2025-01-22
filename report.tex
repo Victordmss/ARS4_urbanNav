@@ -181,6 +181,17 @@ y_t \\
 
 \section{Simulation Implementation}
 
+Filter is implemented following system and observation modelling sections. Once implemented, we seek to tune it so that it has 95\% consistency. We also have to check if the estimation error is not biased. We do consistency test using the reference values for the variables x, y and heading (h). We do the test for each of them. The results are shown in the following table:
+
+\begin{align*}
+\begin{tabular}{c|c|c|c|c} 
+  Variable & Mean Error & Max Error & MSE & Consistency \\ \hline 
+  x & 0.10644 & 1.9729 & 0.15641 & 0.99853 \\
+  y   & -0.056811 & 2.3455 &  0.12408 & 0.98387\\
+\end{tabular}
+\end{align*}
+
+
 The initial state for the simulation refered to the first position of the GNSS sensor. We have \begin{align*}
    x_0 = \begin{bmatrix}
     \text{gnss(1).x} \\ 
@@ -194,24 +205,42 @@ The initial state for the simulation refered to the first position of the GNSS s
 \noindent Initial covariance matrix $P$ is set to
 \begin{align*}
    P = \begin{bmatrix}
-    0.5 & 0 & 0 & 0 & 0 \\ 
-    0 & 0.5 & 0 & 0 & 0 \\
+    0.1 & 0 & 0 & 0 & 0 \\ 
+    0 & 0.1 & 0 & 0 & 0 \\
     0 & 0 & 0.1 & 0 & 0 \\
-    0 & 0 & 0 & 0.1 & 0 \\
-    0 & 0 & 0 & 0 & 0.1
+    0 & 0 & 0 & 0.5 & 0 \\
+    0 & 0 & 0 & 0 & 0.5
     \end{bmatrix}
 \end{align*}
 
 \noindent Initial process noise matrix $Q$ is set to
 \begin{align*}
    Q = \begin{bmatrix}
-    0.01 & 0 & 0 & 0 & 0 \\ 
-    0 & 0.01 & 0 & 0 & 0 \\
-    0 & 0 & 0.001 & 0 & 0 \\
-    0 & 0 & 0 & 0.01 & 0 \\
-    0 & 0 & 0 & 0 & 0.001
+    0.1 & 0 & 0 & 0 & 0 \\ 
+    0 & 0.1 & 0 & 0 & 0 \\
+    0 & 0 & 0.7 & 0 & 0 \\
+    0 & 0 & 0 & 0.1 & 0 \\
+    0 & 0 & 0 & 0 & 0.5
     \end{bmatrix}
 \end{align*}
+
+\begin{align*}
+   R_g = \begin{bmatrix}
+    0.1 & 0 & 0 \\ 
+    0 & 0.1 & 0 \\
+    0 & 0 & 0.01  \\
+    \end{bmatrix}
+\end{align*}
+
+
+\begin{align*}
+   R_l = \begin{bmatrix}
+    0.7 & 0 \\ 
+    0 & 0.7 \\
+    \end{bmatrix}
+\end{align*}
+
+\noindent Note that we trust a lot more the GNSS measures than the lidar measures, given the fact that in real data, detection algorithms may fall to detect poles and traffic signs and may also detect some false positives, so we expect to have a really noisy data.
 
 \noindent For the simulation, we decided to separate the two observation models and implement 2 separate Kalman filters. In this way, we can correct the state with two types of independent observations.
 
@@ -269,6 +298,10 @@ The results using just GNSS data are better than with the use of LiDAR measureme
     \caption{EKF Localization with GNSS Observations}
     \label{fig:enter-label}
 \end{figure}
+
+
+
+
 \subsection{Unscented Kalman Filter}
 
 \newpage
@@ -339,8 +372,15 @@ j^* = \arg\min_j \text{d}_j
 
 The implementation of the EKF is the same than in the simulation part, we just need to apply the NN algorithm before the process of LiDAR observation.
 
+
+
 \subsection{Unscented Kalman Filter}
+
+\section{Metrics}
+
+To evaluate the two filters we use 
 
 \section{Conclusion}
 
 \end{document}
+
