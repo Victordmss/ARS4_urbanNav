@@ -21,8 +21,9 @@ figure
 plot([ref.x], [ref.y])
 hold on
 plot([gnss.x], [gnss.y],"r+")
+plot([map(:,1)], [map(:,2)], "b+")
 
-legend('Ref', 'GNSS')
+legend('Ref', 'GNSS', 'Map poles')
 ylabel('North (m)')
 xlabel('East (m)')
 
