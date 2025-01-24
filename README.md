@@ -24,7 +24,7 @@ _All data are synchronized to lidar timestamps (approximately 10 Hz), meaning th
 ## Work 
 
 We propose a modelisation of the system that allows all available sensors to be fused together. Next, we develop an EKF and UKF on both datasets. To apply the filter to real data, we implement an NN data association algorithm to associate lidar measurements with map landmarks. 
-All informations about process and results (like figure below) are available in `ARS4_project_A24.pdf`
+All informations about process and results (like figure below) are available in `ARS4_ProjectReport.pdf`
 
 ![UKF_results](https://github.com/user-attachments/assets/dca8d9b3-1fdb-4916-98d9-4869d32ab7d4)
 
