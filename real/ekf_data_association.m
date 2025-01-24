@@ -5,7 +5,7 @@ close all;
 load("data.mat");
 
 % PUT DISPLAY = FALSE TO DELETE THE DATA ASSOCIATION PROCESS DISPLAY
-display = true;
+display = false;
 
 % Initialize EKF variables
 % Initial state: x, y, theta, v, omega

@@ -7,12 +7,13 @@ pkg load statistics;
 load("data.mat");
 
 % Initialize EKF variables
-% Initial state: x, y, theta, v, omega
-x = [gnss(1).x; gnss(1).y; gnss(1).heading; v(1); omega(1)];
-P = diag([0.1, 0.1, 0.1, 0.5, 0.5]); % Initial covariance
+% Initial state: x, y, theta
+x = [gnss(1).x; gnss(1).y; gnss(1).heading];
+n = length(x);  # State dimension
+P = eye(n); % Initial covariance
 
 % Noise matrices
-Q = diag([0.1, 0.1, 0.7, 0.1, 0.5]); % Process noise
+Q = diag([10, 10, 10]); % Process noise
 R_gnss = diag([0.1, 0.1, 0.01]); % GNSS observation noise
 R_lidar = diag([0.7, 0.7]); % Lidar observation noise
 
@@ -20,26 +21,25 @@ R_lidar = diag([0.7, 0.7]); % Lidar observation noise
 dt = mean(diff(t));
 
 % Storage for EKF estimates
-ekf_estimates = zeros(length(t), 5); % Storing all state variables
+ekf_estimates = zeros(length(t), n); % Storing all state variables
 ekf_estimates(1, :) = x';
 lidar_observations = [];
+Px1 = zeros(length(t), 1);
+Px2 = zeros(length(t), 1);
+Px3 = zeros(length(t), 1);
 
 % EKF loop
 for k = 2:length(t)
     % Prediction Step
     % State prediction
-    x = [x(1) + x(4) * dt * cos(x(3));
-         x(2) + x(4) * dt * sin(x(3));
-         x(3) + x(5) * dt;
-         v(k);
-         omega(k);];
+    x = [x(1) + v(k) * dt * cos(x(3));
+         x(2) + v(k) * dt * sin(x(3));
+         x(3) + omega(k) * dt;];
 
     % Jacobian of the state transition function
-    F = [1, 0, -x(4) * dt * sin(x(3)), dt * cos(x(3)), 0;
-         0, 1, x(4) * dt * cos(x(3)), dt * sin(x(3)), 0;
-         0, 0, 1, 0, dt;
-         0, 0, 0, 1, 0;
-         0, 0, 0, 0, 1];
+    F = [1, 0, -v(k) * dt * sin(x(3));
+         0, 1, v(k) * dt * cos(x(3));
+         0, 0, 1];
 
     % Covariance prediction
     P = F * P * F' + Q;
@@ -47,8 +47,7 @@ for k = 2:length(t)
     % Correction Step with GNSS
     if ~isnan(gnss(k).x)
         z_gnss = [gnss(k).x; gnss(k).y; gnss(k).heading];
-        C_gnss = zeros(3, 5);
-        C_gnss(1:3, 1:3) = eye(3); % Observation Jacobian matrix for GNSS
+        C_gnss = eye(3); % Observation Jacobian matrix for GNSS
         z_pred_gnss = C_gnss * x; % Predicted GNSS measurement
         K_gnss = P * C_gnss' / (C_gnss * P * C_gnss' + R_gnss); % Kalman gain for GNSS
         x = x + K_gnss * (z_gnss - z_pred_gnss); % State update with GNSS
@@ -60,31 +59,28 @@ for k = 2:length(t)
         n_landmarks = length(obs(k).x_map);
         z_lidar = [];
         z_pred_lidar = [];
-        C_lidar = zeros(2 * n_landmarks, 5);
+        C_lidar = zeros(2 * n_landmarks, n);
 
         for i = 1:n_landmarks
-            r = sqrt(obs(k).x(i)^2 + obs(k).y(i)^2);
-            bearing = atan2(obs(k).y(i), obs(k).x(i));
-
             % Lidar measurements in polar coordinates
-            z_lidar = [z_lidar; r; bearing];
+            z_lidar = [z_lidar; obs(k).x(i); obs(k).y(i)];
 
-            % Predicted Lidar measurement
+            % Predicted Lidar measurement in Cartesian coordinates
             delta_x = obs(k).x_map(i) - x(1);
             delta_y = obs(k).y_map(i) - x(2);
-            r_pred = sqrt(delta_x^2 + delta_y^2);
-            bearing_pred = atan2(delta_y, delta_x) - x(3);
-            z_pred_lidar = [z_pred_lidar; r_pred; bearing_pred];
+            x_pred = delta_x * cos(x(3)) + delta_y * sin(x(3));
+            y_pred = - delta_x * sin(x(3)) + delta_y * cos(x(3));
+            z_pred_lidar = [z_pred_lidar; x_pred; y_pred];
 
-            % Jacobian matrix for Lidar
+            % Jacobian matrix for Lidar in Cartesian coordinates
             row_idx = 2 * (i - 1) + 1;
-            C_lidar(row_idx, 1) = -(delta_x / r_pred);
-            C_lidar(row_idx, 2) = -(delta_y / r_pred);
-            C_lidar(row_idx, 3) = 0;
+            C_lidar(row_idx, 1) = -cos(x(3));
+            C_lidar(row_idx, 2) = -sin(x(3));
+            C_lidar(row_idx, 3) = -sin(x(3))*delta_x + cos(x(3))*delta_y;
 
-            C_lidar(row_idx + 1, 1) = delta_y / (r_pred^2);
-            C_lidar(row_idx + 1, 2) = -delta_x / (r_pred^2);
-            C_lidar(row_idx + 1, 3) = -1;
+            C_lidar(row_idx + 1, 1) = sin(x(3));
+            C_lidar(row_idx + 1, 2) = -cos(x(3));
+            C_lidar(row_idx + 1, 3) = -cos(x(3))*delta_x - sin(x(3))*delta_y;
         end
 
         % Kalman gain for Lidar
@@ -108,6 +104,9 @@ for k = 2:length(t)
 
     % Save EKF estimate for visualization
     ekf_estimates(k, :) = x';
+    Px1(i) = P(1,1);
+    Px2(i) = P(2,2);
+    Px3(i) = P(3,3);
 end
 
 % Plot results
@@ -122,13 +121,6 @@ xlabel('East (m)');
 ylabel('North (m)');
 grid on;
 
-waitfor(h)
-
-
-Px1 = P(1,1);
-Px2 = P(2,2);
-Px3 = P(3,3);
-
 %Metrics
 ex=ekf_estimates(:, 1)'-[ref.x];
 ex = ex';
@@ -136,15 +128,24 @@ ex_m=mean(ex);
 ex_abs_max=max(abs(ex));
 ex_MSE=mean((ex-ex_m).^2);
 %Find the percentile for the chi-square distribution for any DoF
-DoF=1; %degree of freedom 
+DoF=1; %degree of freedom
 Pr=0.99; %Chosen percentile
 Th=chi2inv(Pr,DoF); %Threshold
-Consistency_x=mean(ex./Px1'.*ex< Th);
+Consistency_x=mean(ex./P(1,1)'.*ex< Th);
 disp(['Mean Error in x= ', num2str(ex_m)]);
 disp(['Max Error in x= ', num2str(ex_abs_max)]);
 disp(['Mean Square Error in x= ', num2str(mean(ex_MSE))]);
 disp(['Consistency in x= ', num2str(Consistency_x)]);
 disp('');
+
+figure;
+plot(t,ex, 'DisplayName', 'X error');zoom on;hold on;
+plot(t,3*sqrt(Px1),'r', 'DisplayName', '+3s');
+plot(t,-3*sqrt(Px1),'r', 'DisplayName', '-3s');
+ylabel('x');
+xlabel('t (s)');
+title('Estimation error on x with +/- 3 sigma bounds');
+legend;
 
 ex=ekf_estimates(:, 2)'-[ref.y];
 ex = ex';
@@ -152,15 +153,24 @@ ex_m=mean(ex);
 ex_abs_max=max(abs(ex));
 ex_MSE=mean((ex-ex_m).^2);
 %Find the percentile for the chi-square distribution for any DoF
-DoF=1; %degree of freedom 
+DoF=1; %degree of freedom
 Pr=0.99; %Chosen percentile
 Th=chi2inv(Pr,DoF); %Threshold
-Consistency_y=mean((ex./Px2'.*ex)< Th);
+Consistency_y=mean((ex./P(2,2)'.*ex)< Th);
 disp(['Mean Error in y= ', num2str(ex_m)]);
 disp(['Max Error in y= ', num2str(ex_abs_max)]);
 disp(['Mean Square Error in y= ', num2str(mean(ex_MSE))]);
 disp(['Consistency in y= ', num2str(Consistency_y)]);
 disp('');
+
+figure;
+plot(t,ex, 'DisplayName', 'Y error');zoom on;hold on;
+plot(t,3*sqrt(Px2),'r', 'DisplayName', '+3s');
+plot(t,-3*sqrt(Px2),'r','DisplayName', '-3s');
+ylabel('y');
+xlabel('t (s)');
+title('Estimation error on y with +/- 3 sigma bounds');
+legend;
 
 ex=ekf_estimates(:, 3)'-[ref.heading];
 ex = ex';
@@ -168,12 +178,22 @@ ex_m=mean(ex);
 ex_abs_max=max(abs(ex));
 ex_MSE=mean((ex-ex_m).^2);
 %Find the percentile for the chi-square distribution for any DoF
-DoF=1; %degree of freedom 
+DoF=1; %degree of freedom
 Pr=0.99; %Chosen percentile
 Th=chi2inv(Pr,DoF); %Threshold
-Consistency_h=mean((ex./Px3'.*ex)< Th);
+Consistency_h=mean((ex./P(3,3)'.*ex)< Th);
 disp(['Mean Error in h= ', num2str(ex_m)]);
 disp(['Max Error in h= ', num2str(ex_abs_max)]);
 disp(['Mean Square Error in h= ', num2str(mean(ex_MSE))]);
 disp(['Consistency in h= ', num2str(Consistency_h)]);
 disp('');
+
+figure;
+plot(t,ex, 'DisplayName', 'Theta error');zoom on;hold on;
+plot(t,3*sqrt(Px3),'r', 'DisplayName', '+3s');
+plot(t,-3*sqrt(Px3),'r', 'DisplayName', '-3s');
+ylabel('theta');
+xlabel('t (s)');
+title('Estimation error on theta with +/- 3 sigma bounds');
+legend;
+
